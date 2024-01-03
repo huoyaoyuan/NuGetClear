@@ -1,4 +1,6 @@
-﻿using NuGet.Configuration;
+﻿using System.CommandLine;
+using System.CommandLine.Parsing;
+using NuGet.Configuration;
 using NuGet.Packaging;
 using NuGet.ProjectModel;
 
@@ -6,22 +8,22 @@ namespace NuGetClear;
 
 internal static class Program
 {
-    private static IEnumerable<LockFile> EnumerateLockFiles(string rootDirectory)
+    private static IEnumerable<LockFile> EnumerateLockFiles(DirectoryInfo rootDirectory)
     {
         var format = new LockFileFormat();
 
-        foreach (string fileName in Directory.EnumerateFiles(rootDirectory, LockFileFormat.AssetsFileName, SearchOption.AllDirectories)
-            .Concat(Directory.EnumerateFiles(rootDirectory, LockFileFormat.LockFileName, SearchOption.AllDirectories)))
+        foreach (var file in rootDirectory.EnumerateFiles(LockFileFormat.AssetsFileName, SearchOption.AllDirectories)
+            .Concat(rootDirectory.EnumerateFiles(LockFileFormat.LockFileName, SearchOption.AllDirectories)))
         {
             LockFile? lockFile = null;
 
             try
             {
-                lockFile = format.Read(fileName);
+                lockFile = format.Read(file.FullName);
             }
             catch
             {
-                Console.WriteLine($"  Failed parsing {fileName}. Skipping.");
+                Console.WriteLine($"  Failed parsing {file.FullName}. Skipping.");
             }
 
             if (lockFile != null)
@@ -29,19 +31,19 @@ internal static class Program
         }
     }
 
-    private static IEnumerable<PackagesLockFile> EnumeratePackagesLockFile(string rootDirectory)
+    private static IEnumerable<PackagesLockFile> EnumeratePackagesLockFile(DirectoryInfo rootDirectory)
     {
-        foreach (string fileName in Directory.EnumerateFiles(rootDirectory, PackagesLockFileFormat.LockFileName, SearchOption.AllDirectories))
+        foreach (var file in rootDirectory.EnumerateFiles(PackagesLockFileFormat.LockFileName, SearchOption.AllDirectories))
         {
             PackagesLockFile? lockFile = null;
 
             try
             {
-                lockFile = PackagesLockFileFormat.Read(fileName);
+                lockFile = PackagesLockFileFormat.Read(file.FullName);
             }
             catch
             {
-                Console.WriteLine($"  Failed parsing {fileName}. Skipping.");
+                Console.WriteLine($"  Failed parsing {file.FullName}. Skipping.");
             }
 
             if (lockFile != null)
@@ -64,17 +66,48 @@ internal static class Program
         _ => $"{(length / (double)(1L << 40)):F2} TiB",
     };
 
-    public static void Main()
+    public static int Main(string[] args)
     {
-        Console.Write("Root directory:");
-        string path = Console.ReadLine()!;
+        var directoryOption = new Option<DirectoryInfo>(
+            ["-r", "--root-directory"],
+            "The root directory to scan for built projects.")
+        {
+            IsRequired = true,
+        }
+            .ExistingOnly();
+        var globalPackagesOption = new Option<DirectoryInfo>(
+            ["-g", "--global-packages"],
+            "The nuget global package folders.")
+            .ExistingOnly();
 
+        var dryRunOption = new Option<bool>(
+            ["--dry-run"],
+            "Do not do the actual clean up.");
+
+        var rootCommand = new RootCommand("Cleans nuget packages folder based on dependencies of built projects.")
+        {
+            directoryOption,
+            globalPackagesOption,
+            dryRunOption
+        };
+
+        rootCommand.SetHandler(
+            MainCommand,
+            directoryOption,
+            globalPackagesOption,
+            dryRunOption);
+
+        return rootCommand.Invoke(args);
+    }
+
+    private static void MainCommand(DirectoryInfo rootDirectory, DirectoryInfo? globalPackages, bool dryRun)
+    {
         var usedPackages = new HashSet<(string Name, string Version)>();
 
         Console.WriteLine($"Collecting {LockFileFormat.AssetsFileName}, {LockFileFormat.LockFileName} files...");
 
         usedPackages.AddRange(
-            from f in EnumerateLockFiles(path)
+            from f in EnumerateLockFiles(rootDirectory)
             from l in f.Libraries
             where l.MSBuildProject is null
             select (l.Name.ToLowerInvariant(), l.Version.ToNormalizedString()));
@@ -82,7 +115,7 @@ internal static class Program
         Console.WriteLine($"Collecting {PackagesLockFileFormat.LockFileName} files...");
 
         usedPackages.AddRange(
-            from f in EnumeratePackagesLockFile(path)
+            from f in EnumeratePackagesLockFile(rootDirectory)
             from t in f.Targets
             from d in t.Dependencies
             where d.Type != PackageDependencyType.Project
@@ -97,9 +130,12 @@ internal static class Program
 
         Console.WriteLine("Collecting .nuget cache...");
 
-        var nugetRoot = new DirectoryInfo(SettingsUtility.GetGlobalPackagesFolder(NullSettings.Instance));
+        globalPackages ??= new DirectoryInfo(SettingsUtility.GetGlobalPackagesFolder(NullSettings.Instance));
+
+        Console.WriteLine($"Using global nuget packages folder at {globalPackages.FullName}");
+
         var cachedPackages =
-            (from p in nugetRoot.EnumerateDirectories()
+            (from p in globalPackages.EnumerateDirectories()
              from v in p.EnumerateDirectories()
              select (Name: p.Name, VersionPath: v))
             .ToList();
