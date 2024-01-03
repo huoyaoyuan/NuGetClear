@@ -1,11 +1,9 @@
-﻿using NuGet.ProjectModel;
+﻿using NuGet.Packaging;
+using NuGet.ProjectModel;
+using NuGet.Versioning;
 
 Console.Write("Root directory:");
 string path = Console.ReadLine()!;
-
-Console.WriteLine($"Collecting {LockFileFormat.AssetsFileName}, {LockFileFormat.LockFileName} files...");
-
-var assets = EnumerateLockFiles(path).ToList();
 
 static IEnumerable<LockFile> EnumerateLockFiles(string rootDirectory)
 {
@@ -50,4 +48,21 @@ static IEnumerable<PackagesLockFile> EnumeratePackagesLockFile(string rootDirect
     }
 }
 
-Console.WriteLine($"Successfully collected {assets.Count} files.");
+var usedPackages = new HashSet<(string Name, NuGetVersion Version)>();
+
+Console.WriteLine($"Collecting {LockFileFormat.AssetsFileName}, {LockFileFormat.LockFileName} files...");
+
+usedPackages.AddRange(
+    from f in EnumerateLockFiles(path)
+    from l in f.Libraries
+    select (l.Name, l.Version));
+
+Console.WriteLine($"Collecting {PackagesLockFileFormat.LockFileName} files...");
+
+usedPackages.AddRange(
+    from f in EnumeratePackagesLockFile(path)
+    from t in f.Targets
+    from d in t.Dependencies
+    select (d.Id, d.ResolvedVersion));
+
+Console.WriteLine($"Totally {usedPackages.Count} versions of {usedPackages.DistinctBy(p => p.Name).Count()} package are in use.");
