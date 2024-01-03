@@ -1,4 +1,5 @@
-﻿using NuGet.Packaging;
+﻿using NuGet.Configuration;
+using NuGet.Packaging;
 using NuGet.ProjectModel;
 
 namespace NuGetClear;
@@ -96,7 +97,7 @@ internal static class Program
 
         Console.WriteLine("Collecting .nuget cache...");
 
-        var nugetRoot = new DirectoryInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages"));
+        var nugetRoot = new DirectoryInfo(SettingsUtility.GetGlobalPackagesFolder(NullSettings.Instance));
         var cachedPackages =
             (from p in nugetRoot.EnumerateDirectories()
              from v in p.EnumerateDirectories()
