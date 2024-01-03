@@ -1,6 +1,5 @@
 ﻿using NuGet.Packaging;
 using NuGet.ProjectModel;
-using NuGet.Versioning;
 
 Console.Write("Root directory:");
 string path = Console.ReadLine()!;
@@ -48,14 +47,14 @@ static IEnumerable<PackagesLockFile> EnumeratePackagesLockFile(string rootDirect
     }
 }
 
-var usedPackages = new HashSet<(string Name, NuGetVersion Version)>();
+var usedPackages = new HashSet<(string Name, string Version)>();
 
 Console.WriteLine($"Collecting {LockFileFormat.AssetsFileName}, {LockFileFormat.LockFileName} files...");
 
 usedPackages.AddRange(
     from f in EnumerateLockFiles(path)
     from l in f.Libraries
-    select (l.Name, l.Version));
+    select (l.Name.ToLowerInvariant(), l.Version.ToNormalizedString()));
 
 Console.WriteLine($"Collecting {PackagesLockFileFormat.LockFileName} files...");
 
@@ -63,9 +62,14 @@ usedPackages.AddRange(
     from f in EnumeratePackagesLockFile(path)
     from t in f.Targets
     from d in t.Dependencies
-    select (d.Id, d.ResolvedVersion));
+    select (d.Id.ToLowerInvariant(), d.ResolvedVersion.ToNormalizedString()));
 
 Console.WriteLine($"Totally {usedPackages.Count} versions of {usedPackages.DistinctBy(p => p.Name).Count()} package are in use.");
+
+//File.WriteAllLines("used.txt",
+//    from p in usedPackages
+//    orderby p.Name, p.Version
+//    select p.Name + " " + p.Version);
 
 Console.WriteLine("Collecting .nuget cache...");
 
@@ -76,4 +80,15 @@ var cachedPackages =
     select (Name: p.Name, VersionPath: v))
     .ToList();
 
+//File.WriteAllLines("cached.txt",
+//    from p in cachedPackages
+//    orderby p.Name, p.VersionPath.Name
+//    select p.Name + " " + p.VersionPath.Name);
+
 Console.WriteLine($"Totally {cachedPackages.Count} versions of {cachedPackages.DistinctBy(p => p.Name).Count()} package are in cache.");
+
+var trimmablePackages = cachedPackages
+    .Where(p => !usedPackages.Contains((p.Name.ToLowerInvariant(), p.VersionPath.Name)))
+    .ToList();
+
+Console.WriteLine($"Totally {trimmablePackages.Count} versions of {trimmablePackages.DistinctBy(p => p.Name).Count()} package are trimmable.");
