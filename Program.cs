@@ -68,7 +68,7 @@ internal static class Program
 
     public static int Main(string[] args)
     {
-        var directoryOption = new Option<DirectoryInfo>(
+        var directoryOption = new Option<DirectoryInfo[]>(
             ["-r", "--root-directory"],
             "The root directory to scan for built projects.")
         {
@@ -100,26 +100,30 @@ internal static class Program
         return rootCommand.Invoke(args);
     }
 
-    private static void MainCommand(DirectoryInfo rootDirectory, DirectoryInfo? globalPackages, bool dryRun)
+    private static void MainCommand(DirectoryInfo[] rootDirectories, DirectoryInfo? globalPackages, bool dryRun)
     {
         var usedPackages = new HashSet<(string Name, string Version)>();
 
-        Console.WriteLine($"Collecting {LockFileFormat.AssetsFileName}, {LockFileFormat.LockFileName} files...");
+        foreach (var rootDirectory in rootDirectories)
+        {
+            Console.WriteLine($"Scanning {rootDirectory.FullName} for project assets...");
+            Console.WriteLine($"Collecting {LockFileFormat.AssetsFileName}, {LockFileFormat.LockFileName} files...");
 
-        usedPackages.AddRange(
-            from f in EnumerateLockFiles(rootDirectory)
-            from l in f.Libraries
-            where l.MSBuildProject is null
-            select (l.Name.ToLowerInvariant(), l.Version.ToNormalizedString()));
+            usedPackages.AddRange(
+                from f in EnumerateLockFiles(rootDirectory)
+                from l in f.Libraries
+                where l.MSBuildProject is null
+                select (l.Name.ToLowerInvariant(), l.Version.ToNormalizedString()));
 
-        Console.WriteLine($"Collecting {PackagesLockFileFormat.LockFileName} files...");
+            Console.WriteLine($"Collecting {PackagesLockFileFormat.LockFileName} files...");
 
-        usedPackages.AddRange(
-            from f in EnumeratePackagesLockFile(rootDirectory)
-            from t in f.Targets
-            from d in t.Dependencies
-            where d.Type != PackageDependencyType.Project
-            select (d.Id.ToLowerInvariant(), d.ResolvedVersion.ToNormalizedString()));
+            usedPackages.AddRange(
+                from f in EnumeratePackagesLockFile(rootDirectory)
+                from t in f.Targets
+                from d in t.Dependencies
+                where d.Type != PackageDependencyType.Project
+                select (d.Id.ToLowerInvariant(), d.ResolvedVersion.ToNormalizedString()));
+        }
 
         Console.WriteLine($"Totally {usedPackages.Count} versions of {usedPackages.DistinctBy(p => p.Name).Count()} package are in use.");
 
