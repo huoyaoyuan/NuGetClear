@@ -84,23 +84,40 @@ internal static class Program
             ["--dry-run"],
             "Do not do the actual clean up.");
 
+        var usedCatalog = new Option<FileInfo>(
+            ["--cu"],
+            "Catalog output for used packages.");
+        
+        var cachedCatalog = new Option<FileInfo>(
+            ["--cc"],
+            "Catalog output for cached packages.");
+
         var rootCommand = new RootCommand("Cleans nuget packages folder based on dependencies of built projects.")
         {
             directoryOption,
             globalPackagesOption,
-            dryRunOption
+            dryRunOption,
+            usedCatalog,
+            cachedCatalog
         };
 
         rootCommand.SetHandler(
             MainCommand,
             directoryOption,
             globalPackagesOption,
-            dryRunOption);
+            dryRunOption,
+            usedCatalog,
+            cachedCatalog);
 
         return rootCommand.Invoke(args);
     }
 
-    private static void MainCommand(DirectoryInfo[] rootDirectories, DirectoryInfo? globalPackages, bool dryRun)
+    private static void MainCommand(
+        DirectoryInfo[] rootDirectories,
+        DirectoryInfo? globalPackages,
+        bool dryRun,
+        FileInfo? usedCatalog,
+        FileInfo? cachedCatalog)
     {
         var usedPackages = new HashSet<(string Name, string Version)>();
 
@@ -127,10 +144,13 @@ internal static class Program
 
         Console.WriteLine($"Totally {usedPackages.Count} versions of {usedPackages.DistinctBy(p => p.Name).Count()} package are in use.");
 
-        //File.WriteAllLines("used.txt",
-        //    from p in usedPackages
-        //    orderby p.Name, p.Version
-        //    select p.Name + " " + p.Version);
+        if (usedCatalog != null)
+        {
+            File.WriteAllLines(usedCatalog.FullName,
+                from p in usedPackages
+                orderby p.Name, p.Version
+                select p.Name + "/" + p.Version);
+        }
 
         Console.WriteLine("Collecting .nuget cache...");
 
@@ -144,10 +164,13 @@ internal static class Program
              select (Name: p.Name, VersionPath: v, Size: DirectorySize(v)))
             .ToList();
 
-        //File.WriteAllLines("cached.txt",
-        //    from p in cachedPackages
-        //    orderby p.Name, p.VersionPath.Name
-        //    select p.Name + " " + p.VersionPath.Name);
+        if (cachedCatalog != null)
+        {
+            File.WriteAllLines(cachedCatalog.FullName,
+                from p in cachedPackages
+                orderby p.Name, p.VersionPath.Name
+                select p.Name + "/" + p.VersionPath.Name);
+        }
 
         Console.WriteLine($"Totally {cachedPackages.Count} versions of {cachedPackages.DistinctBy(p => p.Name).Count()} package are in cache.");
 
@@ -161,5 +184,31 @@ internal static class Program
         long cachedSize = cachedPackages.Sum(p => p.Size);
 
         Console.WriteLine($"{FormatLength(trimmableSize)} of {FormatLength(cachedSize)} are trimmable. Ratio: {(double)trimmableSize / cachedSize:P}.");
+
+        if (dryRun)
+        {
+            foreach (var (_, path, _) in trimmablePackages)
+            {
+                Console.WriteLine($"Delete {path.FullName}");
+            }
+        }
+        else
+        {
+            Console.Write("Continue? y/n:");
+            string? line;
+            do
+            {
+                line = Console.ReadLine();
+            }
+            while (!(line != null && line[0] is 'Y' or 'y' or 'N' or 'n'));
+
+            if (line[0] is 'Y' or 'y')
+            {
+                foreach (var (_, path, _) in trimmablePackages)
+                {
+                    path.Delete();
+                }
+            }
+        }
     }
 }
