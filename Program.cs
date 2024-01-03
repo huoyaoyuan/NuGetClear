@@ -66,3 +66,14 @@ usedPackages.AddRange(
     select (d.Id, d.ResolvedVersion));
 
 Console.WriteLine($"Totally {usedPackages.Count} versions of {usedPackages.DistinctBy(p => p.Name).Count()} package are in use.");
+
+Console.WriteLine("Collecting .nuget cache...");
+
+var nugetRoot = new DirectoryInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages"));
+var cachedPackages =
+    (from p in nugetRoot.EnumerateDirectories()
+    from v in p.EnumerateDirectories()
+    select (Name: p.Name, VersionPath: v))
+    .ToList();
+
+Console.WriteLine($"Totally {cachedPackages.Count} versions of {cachedPackages.DistinctBy(p => p.Name).Count()} package are in cache.");
