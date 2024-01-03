@@ -94,3 +94,23 @@ var trimmablePackages = cachedPackages
     .ToList();
 
 Console.WriteLine($"Totally {trimmablePackages.Count} versions of {trimmablePackages.DistinctBy(p => p.Name).Count()} package are trimmable.");
+
+static long DirectorySize(DirectoryInfo directory)
+{
+    return directory.EnumerateFiles().Select(f => f.Length).Sum()
+        + directory.EnumerateDirectories().Select(DirectorySize).Sum();
+}
+
+static string FormatLength(long length) => length switch
+{
+    < (1L << 10) => $"{length} B",
+    < (1L << 20) => $"{(length / (double)(1L << 10)):F2} KiB",
+    < (1L << 30) => $"{(length / (double)(1L << 20)):F2} MiB",
+    < (1L << 40) => $"{(length / (double)(1L << 30)):F2} GiB",
+    _ => $"{(length / (double)(1L << 40)):F2} TiB",
+};
+
+long trimmableSize = trimmablePackages.Select(p => DirectorySize(p.VersionPath)).Sum();
+long cachedSize = cachedPackages.Select(p => DirectorySize(p.VersionPath)).Sum();
+
+Console.WriteLine($"{FormatLength(trimmableSize)} of {FormatLength(cachedSize)} are trimmable. Ratio: {(double)trimmableSize/cachedSize:P}.");
