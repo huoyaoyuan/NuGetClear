@@ -54,6 +54,7 @@ Console.WriteLine($"Collecting {LockFileFormat.AssetsFileName}, {LockFileFormat.
 usedPackages.AddRange(
     from f in EnumerateLockFiles(path)
     from l in f.Libraries
+    where l.MSBuildProject is null
     select (l.Name.ToLowerInvariant(), l.Version.ToNormalizedString()));
 
 Console.WriteLine($"Collecting {PackagesLockFileFormat.LockFileName} files...");
@@ -62,6 +63,7 @@ usedPackages.AddRange(
     from f in EnumeratePackagesLockFile(path)
     from t in f.Targets
     from d in t.Dependencies
+    where d.Type != PackageDependencyType.Project
     select (d.Id.ToLowerInvariant(), d.ResolvedVersion.ToNormalizedString()));
 
 Console.WriteLine($"Totally {usedPackages.Count} versions of {usedPackages.DistinctBy(p => p.Name).Count()} package are in use.");
