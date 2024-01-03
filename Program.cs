@@ -60,10 +60,10 @@ internal static class Program
     private static string FormatLength(long length) => length switch
     {
         < (1L << 10) => $"{length} B",
-        < (1L << 20) => $"{(length / (double)(1L << 10)):F2} KiB",
-        < (1L << 30) => $"{(length / (double)(1L << 20)):F2} MiB",
-        < (1L << 40) => $"{(length / (double)(1L << 30)):F2} GiB",
-        _ => $"{(length / (double)(1L << 40)):F2} TiB",
+        < (1L << 20) => $"{length / (double)(1L << 10):F2} KiB",
+        < (1L << 30) => $"{length / (double)(1L << 20):F2} MiB",
+        < (1L << 40) => $"{length / (double)(1L << 30):F2} GiB",
+        _ => $"{length / (double)(1L << 40):F2} TiB",
     };
 
     public static int Main(string[] args)
@@ -141,7 +141,7 @@ internal static class Program
         var cachedPackages =
             (from p in globalPackages.EnumerateDirectories()
              from v in p.EnumerateDirectories()
-             select (Name: p.Name, VersionPath: v))
+             select (Name: p.Name, VersionPath: v, Size: DirectorySize(v)))
             .ToList();
 
         //File.WriteAllLines("cached.txt",
@@ -157,8 +157,8 @@ internal static class Program
 
         Console.WriteLine($"Totally {trimmablePackages.Count} versions of {trimmablePackages.DistinctBy(p => p.Name).Count()} package are trimmable.");
 
-        long trimmableSize = trimmablePackages.Select(p => DirectorySize(p.VersionPath)).Sum();
-        long cachedSize = cachedPackages.Select(p => DirectorySize(p.VersionPath)).Sum();
+        long trimmableSize = trimmablePackages.Sum(p => p.Size);
+        long cachedSize = cachedPackages.Sum(p => p.Size);
 
         Console.WriteLine($"{FormatLength(trimmableSize)} of {FormatLength(cachedSize)} are trimmable. Ratio: {(double)trimmableSize / cachedSize:P}.");
     }
