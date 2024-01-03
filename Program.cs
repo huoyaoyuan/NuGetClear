@@ -30,4 +30,24 @@ static IEnumerable<LockFile> EnumerateLockFiles(string rootDirectory)
     }
 }
 
+static IEnumerable<PackagesLockFile> EnumeratePackagesLockFile(string rootDirectory)
+{
+    foreach (string fileName in Directory.EnumerateFiles(rootDirectory, PackagesLockFileFormat.LockFileName, SearchOption.AllDirectories))
+    {
+        PackagesLockFile? lockFile = null;
+
+        try
+        {
+            lockFile = PackagesLockFileFormat.Read(fileName);
+        }
+        catch
+        {
+            Console.WriteLine($"  Failed parsing {fileName}. Skipping.");
+        }
+
+        if (lockFile != null)
+            yield return lockFile;
+    }
+}
+
 Console.WriteLine($"Successfully collected {assets.Count} files.");
