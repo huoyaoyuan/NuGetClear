@@ -161,35 +161,41 @@ internal static class Program
         var cachedPackages =
             (from p in globalPackages.EnumerateDirectories()
              from v in p.EnumerateDirectories()
-             select (Name: p.Name, VersionPath: v, Size: DirectorySize(v)))
+             select (Name: p.Name, Version: v.Name, Size: DirectorySize(v), IsTrimmable: !usedPackages.Contains((p.Name.ToLowerInvariant(), v.Name))))
             .ToList();
 
         if (cachedCatalog != null)
         {
             File.WriteAllLines(cachedCatalog.FullName,
                 from p in cachedPackages
-                orderby p.Name, p.VersionPath.Name
-                select p.Name + "/" + p.VersionPath.Name);
+                orderby p.Name, p.Version
+                select p.Name + "/" + p.Version);
         }
 
         Console.WriteLine($"Totally {cachedPackages.Count} versions of {cachedPackages.DistinctBy(p => p.Name).Count()} package are in cache.");
 
-        var trimmablePackages = cachedPackages
-            .Where(p => !usedPackages.Contains((p.Name.ToLowerInvariant(), p.VersionPath.Name)))
-            .ToList();
+        var trimmablePackages = cachedPackages.Where(p => p.IsTrimmable);
 
-        Console.WriteLine($"Totally {trimmablePackages.Count} versions of {trimmablePackages.DistinctBy(p => p.Name).Count()} package are trimmable.");
+        Console.WriteLine($"Totally {trimmablePackages.Count()} versions of {trimmablePackages.DistinctBy(p => p.Name).Count()} package are trimmable.");
 
         long trimmableSize = trimmablePackages.Sum(p => p.Size);
         long cachedSize = cachedPackages.Sum(p => p.Size);
 
         Console.WriteLine($"{FormatLength(trimmableSize)} of {FormatLength(cachedSize)} are trimmable. Ratio: {(double)trimmableSize / cachedSize:P}.");
 
+        var pathsToDelete = cachedPackages
+            .GroupBy(p => p.Name)
+            .SelectMany(p =>
+                p.All(v => v.IsTrimmable) ?
+                [p.Key] :
+                (from v in p where v.IsTrimmable select Path.Join(v.Name, v.Version)))
+            .Select(relative => Path.Join(globalPackages.FullName, relative));
+
         if (dryRun)
         {
-            foreach (var (_, path, _) in trimmablePackages)
+            foreach (var p in pathsToDelete)
             {
-                Console.WriteLine($"Delete {path.FullName}");
+                Console.WriteLine($"Delete {p}");
             }
         }
         else
@@ -204,9 +210,9 @@ internal static class Program
 
             if (line[0] is 'Y' or 'y')
             {
-                foreach (var (_, path, _) in trimmablePackages)
+                foreach (var p in pathsToDelete)
                 {
-                    path.Delete();
+                    Directory.Delete(p, true);
                 }
             }
         }
