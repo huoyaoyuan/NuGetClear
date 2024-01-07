@@ -1,5 +1,6 @@
 ﻿using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Text.Json;
 using NuGet.Configuration;
 using NuGet.Packaging;
 using NuGet.ProjectModel;
@@ -48,6 +49,28 @@ internal static class Program
 
             if (lockFile != null)
                 yield return lockFile;
+        }
+    }
+
+    private static IEnumerable<DotnetToolsFile> EnumerateDotnetToolsFile(DirectoryInfo rootDirectory)
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+
+        foreach (var file in rootDirectory.EnumerateFiles(DotnetToolsFile.FileName, SearchOption.AllDirectories))
+        {
+            DotnetToolsFile? toolsFile = null;
+
+            try
+            {
+                toolsFile = JsonSerializer.Deserialize<DotnetToolsFile>(file.OpenRead(), options);
+            }
+            catch
+            {
+                Console.WriteLine($"  Failed parsing {file.FullName}. Skipping.");
+            }
+
+            if (toolsFile != null)
+                yield return toolsFile;
         }
     }
 
@@ -140,6 +163,15 @@ internal static class Program
                 from d in t.Dependencies
                 where d.Type != PackageDependencyType.Project
                 select (d.Id.ToLowerInvariant(), d.ResolvedVersion.ToNormalizedString()));
+
+            Console.WriteLine("Scanning dotnet tools...");
+
+            usedPackages.AddRange(
+                from f in EnumerateDotnetToolsFile(rootDirectory)
+                from kvp in f.Tools
+                select (kvp.Key.ToLowerInvariant(), kvp.Value.Version.ToLowerInvariant()));
+
+            // Global tools are stored separately at ~\.dotnet\tools\.store with all dependencies
         }
 
         Console.WriteLine($"Totally {usedPackages.Count} versions of {usedPackages.DistinctBy(p => p.Name).Count()} package are in use.");
